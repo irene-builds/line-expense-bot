@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 
-LINE_ACCESS_TOKEN = os.getenv("L0nsm8GgAARJ6kqBP7lmGGqE0QUREX2FwxgRKr4AUmGuviTwBW1hXVSsHrgAWDt+Cy1erWswXz0viuWf/dcY4NmPBdkNSdUhlXwJH+ceMLWEj/5mhodIBT7muKs5B6H+vVoma3kDBtQsfTWGBReaFAdB04t89/1O/w1cDnyilFU=")
+LINE_ACCESS_TOKEN = os.getenv("LINE_ACCESS_TOKEN")
 print("TOKEN exists:", LINE_ACCESS_TOKEN is not None)
 print("TOKEN length:", len(LINE_ACCESS_TOKEN) if LINE_ACCESS_TOKEN else 0)
 print("TOKEN prefix:", LINE_ACCESS_TOKEN[:5] if LINE_ACCESS_TOKEN else "None")
