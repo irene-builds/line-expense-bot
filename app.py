@@ -7,8 +7,7 @@ from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 
-# ✅ 先直接寫死（之後再改 env）
-LINE_ACCESS_TOKEN = os.getenv("rSved7PHDjfPgW9GB+ZE0Ho0y0kZoMlxcHqIs+iqqfqx81gl+rH9vQOuKwTI2A/HCy1erWswXz0viuWf/dcY4NmPBdkNSdUhlXwJH+ceMLXtyxNWkI08HFFpXfPP/Y+QZKl4Nae0SeGXFnJzv1ofLwdB04t89/1O/w1cDnyilFU="
+LINE_ACCESS_TOKEN = os.getenv("L0nsm8GgAARJ6kqBP7lmGGqE0QUREX2FwxgRKr4AUmGuviTwBW1hXVSsHrgAWDt+Cy1erWswXz0viuWf/dcY4NmPBdkNSdUhlXwJH+ceMLWEj/5mhodIBT7muKs5B6H+vVoma3kDBtQsfTWGBReaFAdB04t89/1O/w1cDnyilFU="
 )
 # Google Sheets 設定
 SCOPES = [
