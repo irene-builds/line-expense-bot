@@ -16,8 +16,18 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds = Credentials.from_service_account_file(
-    "credentials.json",
+import os
+import json
+
+google_credentials_str = os.getenv("GOOGLE_CREDENTIALS")
+
+if not google_credentials_str:
+    raise ValueError("GOOGLE_CREDENTIALS not set")
+
+google_credentials = json.loads(google_credentials_str)
+
+creds = Credentials.from_service_account_info(
+    google_credentials,
     scopes=SCOPES
 )
 
