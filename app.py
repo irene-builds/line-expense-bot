@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from datetime import datetime
 
 from flask import Flask, request
@@ -79,10 +80,45 @@ def classify(text):
 
 
 def parse_price(value):
+    if value is None:
+        return None
+
+    normalized = str(value).strip()
+    normalized = normalized.replace(",", "")
+    normalized = normalized.replace("NT$", "")
+    normalized = normalized.replace("nt$", "")
+    normalized = normalized.replace("$", "")
+    normalized = normalized.replace("元", "")
+
     try:
-        return int(float(str(value).replace(",", "").strip()))
+        return int(float(normalized))
     except (TypeError, ValueError):
         return None
+
+
+def parse_expense_message(text):
+    parts = text.split()
+
+    if len(parts) < 2:
+        return None, None
+
+    price = parse_price(parts[-1])
+    if price is None:
+        return None, None
+
+    item = " ".join(parts[:-1]).strip()
+    if not item:
+        return None, None
+
+    return item, price
+
+
+def parse_month_query(text):
+    match = re.fullmatch(r"查詢\s*(\d{4}-\d{2})", text.strip())
+    if not match:
+        return None
+
+    return match.group(1)
 
 
 def build_monthly_summaries():
@@ -132,8 +168,7 @@ def update_monthly_summary_sheet():
     return monthly_summaries
 
 
-def get_monthly_summary():
-    target_month = datetime.now().strftime("%Y-%m")
+def format_monthly_summary(target_month):
     monthly_summaries = update_monthly_summary_sheet()
     monthly_summary = monthly_summaries.get(
         target_month,
@@ -153,6 +188,41 @@ def get_monthly_summary():
     lines.append("已更新 Monthly summary 報表")
 
     return "\n".join(lines)
+
+
+def get_monthly_summary():
+    target_month = datetime.now().strftime("%Y-%m")
+    return format_monthly_summary(target_month)
+
+
+def delete_last_expense():
+    values = expense_sheet.get_all_values()
+
+    if len(values) <= 1:
+        return "目前沒有可刪除的記帳資料"
+
+    last_row_index = None
+    last_row_values = None
+
+    for row_index in range(len(values), 1, -1):
+        row_values = values[row_index - 1]
+        if any(str(cell).strip() for cell in row_values):
+            last_row_index = row_index
+            last_row_values = row_values
+            break
+
+    if last_row_index is None or last_row_values is None:
+        return "目前沒有可刪除的記帳資料"
+
+    expense_sheet.delete_rows(last_row_index)
+    update_monthly_summary_sheet()
+
+    date = last_row_values[0] if len(last_row_values) > 0 else ""
+    category = last_row_values[1] if len(last_row_values) > 1 else "Other"
+    item = last_row_values[2] if len(last_row_values) > 2 else ""
+    price = last_row_values[3] if len(last_row_values) > 3 else ""
+
+    return f"已刪除上一筆：{date}｜{category}｜{item}｜{price} 元"
 
 def reply_message(reply_token, text):
     headers = {
@@ -186,10 +256,21 @@ def webhook():
             msg = event["message"]["text"]
             reply_token = event["replyToken"]
 
-           # 🔥 本月花費查詢
+            # 🔥 本月花費查詢
             if msg == "本月花費":
                 summary = get_monthly_summary()
                 reply_message(reply_token, summary)
+                continue
+
+            month_query = parse_month_query(msg)
+            if month_query:
+                summary = format_monthly_summary(month_query)
+                reply_message(reply_token, summary)
+                continue
+
+            if msg in ["刪除上一筆", "取消上一筆"]:
+                result = delete_last_expense()
+                reply_message(reply_token, result)
                 continue
 
             # 🔥 分類功能
@@ -209,11 +290,9 @@ def webhook():
                 continue
 
             # 🔥 記帳功能
-            parts = msg.split()
+            item, price = parse_expense_message(msg)
 
-            if len(parts) >= 2 and parts[-1].isdigit():
-                price = parts[-1]
-                item = " ".join(parts[:-1])
+            if item and price is not None:
                 category = classify(item)
                 date = datetime.now().strftime("%Y-%m-%d")
 
@@ -222,7 +301,7 @@ def webhook():
 
                 reply_message(reply_token, f"已記帳：{date}｜{category}｜{item}｜{price} 元")
             else:
-                reply_message(reply_token, "請輸入格式：項目 金額，例如：午餐 120")
+                reply_message(reply_token, "請輸入格式：項目 金額，例如：午餐 120、午餐 120元、咖啡 $80")
 
     return "OK", 200
 
