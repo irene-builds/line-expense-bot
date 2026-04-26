@@ -68,6 +68,36 @@ def classify(text):
 
     return "Other"
 
+def get_monthly_summary():
+    records = expense_sheet.get_all_records()
+    current_month = datetime.now().strftime("%Y-%m")
+
+    total = 0
+    category_totals = {}
+
+    for record in records:
+        date = str(record.get("Date"))
+        category = record.get("Category")
+        price = record.get("Price")
+
+        if date.startswith(current_month):
+            try:
+                price = int(price)
+            except:
+                continue
+
+            total += price
+            category_totals[category] = category_totals.get(category, 0) + price
+
+    if total == 0:
+        return "本月目前還沒有記帳資料"
+
+    lines = [f"本月總花費：{total} 元"]
+
+    for category, amount in category_totals.items():
+        lines.append(f"{category}：{amount} 元")
+
+    return "\n".join(lines)
 
 def reply_message(reply_token, text):
     headers = {
@@ -101,11 +131,11 @@ def webhook():
             msg = event["message"]["text"]
             reply_token = event["replyToken"]
 
-            # 🔥 本月花費查詢
-            if msg == "本月花多少":
-             summary = get_monthly_summary()
-            reply_message(reply_token, summary)
-            continue
+           # 🔥 本月花費查詢
+            if msg == "本月花費":
+                summary = get_monthly_summary()
+                reply_message(reply_token, summary)
+                continue
 
             # 🔥 分類功能
             if msg.startswith("新增分類"):
