@@ -101,7 +101,13 @@ def webhook():
             msg = event["message"]["text"]
             reply_token = event["replyToken"]
 
-            # 🔥 新增分類功能
+            # 🔥 本月花費查詢
+            if msg == "本月花多少":
+             summary = get_monthly_summary()
+            reply_message(reply_token, summary)
+            continue
+
+            # 🔥 分類功能
             if msg.startswith("新增分類"):
                 parts = msg.split()
 
