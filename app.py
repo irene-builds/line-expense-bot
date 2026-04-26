@@ -76,6 +76,8 @@ def reply_message(reply_token, text):
         "messages": [{"type": "text", "text": text}]
     }
     requests.post("https://api.line.me/v2/bot/message/reply", headers=headers, json=body)
+    print("LINE reply status:", response.status_code)
+    print("LINE reply response:", response.text)
 
 
 @app.route("/webhook", methods=["POST"])
@@ -122,7 +124,6 @@ def webhook():
                 reply_message(reply_token, "請輸入格式：項目 金額，例如：午餐 120")
 
     return "OK", 200
-
 
 @app.route("/", methods=["GET"])
 def home():
