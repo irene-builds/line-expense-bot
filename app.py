@@ -113,12 +113,59 @@ def parse_expense_message(text):
     return item, price
 
 
-def parse_month_query(text):
-    match = re.fullmatch(r"查詢\s*(\d{4}-\d{2})", text.strip())
+def parse_backfill_expense_message(text, today=None):
+    today = today or datetime.now()
+    match = re.fullmatch(r"補記帳\s+(\d{1,2})/(\d{1,2})\s+(\S+)\s+(.+)", text.strip())
+
     if not match:
         return None
 
-    return match.group(1)
+    month_text, day_text, category, price_text = match.groups()
+    price = parse_price(price_text)
+
+    if price is None:
+        return None
+
+    try:
+        expense_date = datetime(today.year, int(month_text), int(day_text))
+    except ValueError:
+        return None
+
+    return expense_date.strftime("%Y-%m-%d"), category, "補記帳", price
+
+
+def parse_month_query(text, today=None):
+    today = today or datetime.now()
+    stripped_text = text.strip()
+    year_month_match = re.fullmatch(r"查詢\s*(\d{4})-(\d{1,2})", stripped_text)
+
+    if year_month_match:
+        year_text, month_text = year_month_match.groups()
+        month = int(month_text)
+        if 1 <= month <= 12:
+            return f"{year_text}-{month:02d}"
+
+        return None
+
+    month_match = re.fullmatch(r"查詢\s*(\d{1,2})月(?:總花費)?", stripped_text)
+    if month_match:
+        month = int(month_match.group(1))
+        if 1 <= month <= 12:
+            return f"{today.year}-{month:02d}"
+
+    return None
+
+
+def parse_add_category_message(text):
+    parts = text.split()
+
+    if len(parts) < 3 or parts[0] != "新增分類":
+        return None
+
+    category = parts[1]
+    keywords = ",".join(parts[2:])
+
+    return category, keywords
 
 
 def build_monthly_summaries():
@@ -273,14 +320,22 @@ def webhook():
                 reply_message(reply_token, result)
                 continue
 
+            backfill_expense = parse_backfill_expense_message(msg)
+            if backfill_expense:
+                date, category, item, price = backfill_expense
+
+                expense_sheet.append_row([date, category, item, price, msg])
+                update_monthly_summary_sheet()
+
+                reply_message(reply_token, f"已補記帳：{date}｜{category}｜{price} 元")
+                continue
+
             # 🔥 分類功能
             if msg.startswith("新增分類"):
-                parts = msg.split()
+                add_category = parse_add_category_message(msg)
 
-                if len(parts) >= 3:
-                    category = parts[1]
-                    keywords = ",".join(parts[2:])
-
+                if add_category:
+                    category, keywords = add_category
                     category_sheet.append_row([category, keywords])
 
                     reply_message(reply_token, f"已新增分類：{category}｜關鍵字：{keywords}")
