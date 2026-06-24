@@ -51,6 +51,28 @@ def get_or_create_worksheet(title, rows=1000, cols=10):
 summary_sheet = get_or_create_worksheet("Monthly summary")
 
 
+USAGE_HELP_COMMANDS = {"格式", "提示", "help", "說明"}
+
+
+def is_usage_help_command(text):
+    return text.strip().lower() in USAGE_HELP_COMMANDS
+
+
+def format_usage_help():
+    return "\n".join([
+        "可以用這些格式記帳：",
+        "1. 一般記帳：午餐 120",
+        "2. 補記帳：補記帳 6/18 餐飲 120",
+        "3. 查本月：本月花費",
+        "4. 查月份：查詢6月總花費",
+        "5. 刪除上一筆：刪除上一筆",
+        "6. 指定刪除：刪除 6/18 午餐 120",
+        "7. 新增分類：新增分類 餐飲 午餐 咖啡",
+        "",
+        "想再看一次，傳「格式」或「提示」給我。",
+    ])
+
+
 # 讀分類
 def load_category_keywords():
     records = category_sheet.get_all_records()
@@ -132,6 +154,31 @@ def parse_backfill_expense_message(text, today=None):
         return None
 
     return expense_date.strftime("%Y-%m-%d"), category, "補記帳", price
+
+
+def parse_delete_expense_message(text, today=None):
+    today = today or datetime.now()
+    match = re.fullmatch(r"刪除\s+(\d{1,2})/(\d{1,2})\s+(.+)\s+(\S+)", text.strip())
+
+    if not match:
+        return None
+
+    month_text, day_text, item_text, price_text = match.groups()
+    price = parse_price(price_text)
+
+    if price is None:
+        return None
+
+    try:
+        expense_date = datetime(today.year, int(month_text), int(day_text))
+    except ValueError:
+        return None
+
+    item_text = item_text.strip()
+    if not item_text:
+        return None
+
+    return expense_date.strftime("%Y-%m-%d"), item_text, price
 
 
 def parse_month_query(text, today=None):
@@ -271,6 +318,39 @@ def delete_last_expense():
 
     return f"已刪除上一筆：{date}｜{category}｜{item}｜{price} 元"
 
+
+def delete_expense_by_match(target_date, item_text, target_price):
+    values = expense_sheet.get_all_values()
+    matches = []
+
+    for row_index, row_values in enumerate(values[1:], start=2):
+        date = str(row_values[0]).strip() if len(row_values) > 0 else ""
+        category = str(row_values[1]).strip() if len(row_values) > 1 else ""
+        item = str(row_values[2]).strip() if len(row_values) > 2 else ""
+        price = parse_price(row_values[3] if len(row_values) > 3 else None)
+        raw_message = str(row_values[4]).strip() if len(row_values) > 4 else ""
+
+        searchable_text = " ".join([category, item, raw_message])
+        if date == target_date and price == target_price and item_text in searchable_text:
+            matches.append((row_index, row_values))
+
+    if not matches:
+        return f"找不到這筆資料：{target_date}｜{item_text}｜{target_price} 元"
+
+    if len(matches) > 1:
+        return f"找到 {len(matches)} 筆符合資料，請輸入更明確的項目文字，避免誤刪"
+
+    row_index, row_values = matches[0]
+    expense_sheet.delete_rows(row_index)
+    update_monthly_summary_sheet()
+
+    category = row_values[1] if len(row_values) > 1 else "Other"
+    item = row_values[2] if len(row_values) > 2 else ""
+    price = row_values[3] if len(row_values) > 3 else target_price
+
+    return f"已刪除：{target_date}｜{category}｜{item}｜{price} 元"
+
+
 def reply_message(reply_token, text):
     headers = {
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
@@ -303,6 +383,10 @@ def webhook():
             msg = event["message"]["text"]
             reply_token = event["replyToken"]
 
+            if is_usage_help_command(msg):
+                reply_message(reply_token, format_usage_help())
+                continue
+
             # 🔥 本月花費查詢
             if msg == "本月花費":
                 summary = get_monthly_summary()
@@ -317,6 +401,13 @@ def webhook():
 
             if msg in ["刪除上一筆", "取消上一筆"]:
                 result = delete_last_expense()
+                reply_message(reply_token, result)
+                continue
+
+            delete_expense = parse_delete_expense_message(msg)
+            if delete_expense:
+                target_date, item_text, price = delete_expense
+                result = delete_expense_by_match(target_date, item_text, price)
                 reply_message(reply_token, result)
                 continue
 
@@ -340,7 +431,7 @@ def webhook():
 
                     reply_message(reply_token, f"已新增分類：{category}｜關鍵字：{keywords}")
                 else:
-                    reply_message(reply_token, "請輸入格式：新增分類 類別 關鍵字1 關鍵字2")
+                    reply_message(reply_token, format_usage_help())
 
                 continue
 
@@ -356,7 +447,7 @@ def webhook():
 
                 reply_message(reply_token, f"已記帳：{date}｜{category}｜{item}｜{price} 元")
             else:
-                reply_message(reply_token, "請輸入格式：項目 金額，例如：午餐 120、午餐 120元、咖啡 $80")
+                reply_message(reply_token, format_usage_help())
 
     return "OK", 200
 

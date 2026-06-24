@@ -95,5 +95,81 @@ class CategoryCommandParsingTest(unittest.TestCase):
         self.assertEqual(result, ("餐飲", "午餐,咖啡"))
 
 
+class DeleteExpenseParsingTest(unittest.TestCase):
+    def test_parses_month_day_item_and_price(self):
+        app = load_app_with_fakes()
+
+        result = app.parse_delete_expense_message(
+            "刪除 6/18 午餐 120",
+            today=datetime(2026, 6, 19),
+        )
+
+        self.assertEqual(result, ("2026-06-18", "午餐", 120))
+
+
+class DeleteExpenseTest(unittest.TestCase):
+    def test_deletes_single_matching_expense(self):
+        app = load_app_with_fakes()
+        app.update_monthly_summary_sheet = Mock()
+        app.expense_sheet.get_all_values.return_value = [
+            ["Date", "Category", "Item", "Price", "Raw"],
+            ["2026-06-18", "餐飲", "早餐", "80", "早餐 80"],
+            ["2026-06-18", "餐飲", "午餐", "120", "午餐 120"],
+            ["2026-06-19", "餐飲", "午餐", "120", "午餐 120"],
+        ]
+
+        result = app.delete_expense_by_match("2026-06-18", "午餐", 120)
+
+        app.expense_sheet.delete_rows.assert_called_once_with(3)
+        app.update_monthly_summary_sheet.assert_called_once()
+        self.assertEqual(result, "已刪除：2026-06-18｜餐飲｜午餐｜120 元")
+
+    def test_does_not_delete_when_no_expense_matches(self):
+        app = load_app_with_fakes()
+        app.expense_sheet.get_all_values.return_value = [
+            ["Date", "Category", "Item", "Price", "Raw"],
+            ["2026-06-18", "餐飲", "早餐", "80", "早餐 80"],
+        ]
+
+        result = app.delete_expense_by_match("2026-06-18", "午餐", 120)
+
+        app.expense_sheet.delete_rows.assert_not_called()
+        self.assertEqual(result, "找不到這筆資料：2026-06-18｜午餐｜120 元")
+
+    def test_does_not_delete_when_multiple_expenses_match(self):
+        app = load_app_with_fakes()
+        app.expense_sheet.get_all_values.return_value = [
+            ["Date", "Category", "Item", "Price", "Raw"],
+            ["2026-06-18", "餐飲", "午餐", "120", "午餐 120"],
+            ["2026-06-18", "餐飲", "午餐便當", "120", "午餐便當 120"],
+        ]
+
+        result = app.delete_expense_by_match("2026-06-18", "午餐", 120)
+
+        app.expense_sheet.delete_rows.assert_not_called()
+        self.assertEqual(result, "找到 2 筆符合資料，請輸入更明確的項目文字，避免誤刪")
+
+
+class UsageHelpTest(unittest.TestCase):
+    def test_includes_every_supported_command_format(self):
+        app = load_app_with_fakes()
+
+        help_text = app.format_usage_help()
+
+        self.assertIn("午餐 120", help_text)
+        self.assertIn("補記帳 6/18 餐飲 120", help_text)
+        self.assertIn("本月花費", help_text)
+        self.assertIn("查詢6月總花費", help_text)
+        self.assertIn("刪除上一筆", help_text)
+        self.assertIn("刪除 6/18 午餐 120", help_text)
+        self.assertIn("新增分類 餐飲 午餐 咖啡", help_text)
+
+    def test_recognizes_help_commands(self):
+        app = load_app_with_fakes()
+
+        for text in ["格式", "提示", "help", "說明"]:
+            self.assertTrue(app.is_usage_help_command(text))
+
+
 if __name__ == "__main__":
     unittest.main()
