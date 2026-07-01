@@ -43,15 +43,42 @@ def load_app_with_fakes():
 
 
 class BackfillExpenseParsingTest(unittest.TestCase):
-    def test_parses_month_day_category_and_price(self):
+    def test_parses_month_day_item_and_price(self):
         app = load_app_with_fakes()
 
         result = app.parse_backfill_expense_message(
-            "補記帳 6/18 餐飲 120",
+            "補記帳 6/18 午餐 120",
             today=datetime(2026, 6, 19),
         )
 
-        self.assertEqual(result, ("2026-06-18", "餐飲", "補記帳", 120))
+        self.assertEqual(result, ("2026-06-18", "午餐", 120))
+
+
+class BackfillExpenseWebhookTest(unittest.TestCase):
+    def test_classifies_item_with_existing_rules_before_saving(self):
+        app = load_app_with_fakes()
+        app.classify = Mock(return_value="Lunch")
+        app.update_monthly_summary_sheet = Mock()
+        app.reply_message = Mock()
+
+        response = app.app.test_client().post(
+            "/webhook",
+            json={
+                "events": [
+                    {
+                        "type": "message",
+                        "message": {"type": "text", "text": "補記帳 6/18 午餐 120"},
+                        "replyToken": "reply-token",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        app.classify.assert_called_once_with("午餐")
+        app.expense_sheet.append_row.assert_called_once_with(
+            ["2026-06-18", "Lunch", "午餐", 120, "補記帳 6/18 午餐 120"]
+        )
 
 
 class MonthQueryParsingTest(unittest.TestCase):
@@ -157,7 +184,7 @@ class UsageHelpTest(unittest.TestCase):
         help_text = app.format_usage_help()
 
         self.assertIn("午餐 120", help_text)
-        self.assertIn("補記帳 6/18 餐飲 120", help_text)
+        self.assertIn("補記帳 6/18 午餐 120", help_text)
         self.assertIn("本月花費", help_text)
         self.assertIn("查詢6月總花費", help_text)
         self.assertIn("刪除上一筆", help_text)

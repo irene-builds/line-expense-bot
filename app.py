@@ -62,7 +62,7 @@ def format_usage_help():
     return "\n".join([
         "可以用這些格式記帳：",
         "1. 一般記帳：午餐 120",
-        "2. 補記帳：補記帳 6/18 餐飲 120",
+        "2. 補記帳：補記帳 6/18 午餐 120",
         "3. 查本月：本月花費",
         "4. 查月份：查詢6月總花費",
         "5. 刪除上一筆：刪除上一筆",
@@ -142,7 +142,7 @@ def parse_backfill_expense_message(text, today=None):
     if not match:
         return None
 
-    month_text, day_text, category, price_text = match.groups()
+    month_text, day_text, item, price_text = match.groups()
     price = parse_price(price_text)
 
     if price is None:
@@ -153,7 +153,7 @@ def parse_backfill_expense_message(text, today=None):
     except ValueError:
         return None
 
-    return expense_date.strftime("%Y-%m-%d"), category, "補記帳", price
+    return expense_date.strftime("%Y-%m-%d"), item, price
 
 
 def parse_delete_expense_message(text, today=None):
@@ -413,7 +413,8 @@ def webhook():
 
             backfill_expense = parse_backfill_expense_message(msg)
             if backfill_expense:
-                date, category, item, price = backfill_expense
+                date, item, price = backfill_expense
+                category = classify(item)
 
                 expense_sheet.append_row([date, category, item, price, msg])
                 update_monthly_summary_sheet()
