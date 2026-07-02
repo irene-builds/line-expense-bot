@@ -80,6 +80,31 @@ class BackfillExpenseWebhookTest(unittest.TestCase):
             ["2026-06-18", "Lunch", "午餐", 120, "補記帳 6/18 午餐 120"]
         )
 
+    def test_accepts_full_width_colon_before_backfill_date(self):
+        app = load_app_with_fakes()
+        app.classify = Mock(return_value="Lunch")
+        app.update_monthly_summary_sheet = Mock()
+        app.reply_message = Mock()
+
+        response = app.app.test_client().post(
+            "/webhook",
+            json={
+                "events": [
+                    {
+                        "type": "message",
+                        "message": {"type": "text", "text": "補記帳：7/1 中餐 62"},
+                        "replyToken": "reply-token",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        app.classify.assert_called_once_with("中餐")
+        app.expense_sheet.append_row.assert_called_once_with(
+            ["2026-07-01", "Lunch", "中餐", 62, "補記帳：7/1 中餐 62"]
+        )
+
 
 class MonthQueryParsingTest(unittest.TestCase):
     def test_parses_year_month_query(self):

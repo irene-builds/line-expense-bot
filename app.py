@@ -137,7 +137,10 @@ def parse_expense_message(text):
 
 def parse_backfill_expense_message(text, today=None):
     today = today or datetime.now()
-    match = re.fullmatch(r"補記帳\s+(\d{1,2})/(\d{1,2})\s+(\S+)\s+(.+)", text.strip())
+    match = re.fullmatch(
+        r"補記帳(?:\s*[：:]\s*|\s+)(\d{1,2})/(\d{1,2})\s+(\S+)\s+(.+)",
+        text.strip(),
+    )
 
     if not match:
         return None
